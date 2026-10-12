@@ -138,6 +138,12 @@ button:disabled {
   background: var(--accent-bg);
 }
 
+.alert.notice {
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 14px;
+}
+
 .alert.error {
   background: var(--error-bg);
   color: var(--error-text);

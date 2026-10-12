@@ -1,11 +1,22 @@
 import { NextResponse } from 'next/server';
 import products from '@/data/products.json';
 import { getRecommendations } from '@/lib/gemini';
+import { searchProducts } from '@/lib/localSearch';
 
 const productIds = new Set(products.map((p) => p.id));
 // Image URLs are irrelevant to the AI, so keep them out of the prompt.
 const catalogForAI = products.map(({ image, ...product }) => product);
 const MAX_QUERY_LENGTH = 500;
+
+// Never trust model output blindly: drop unknown or duplicate ids.
+function sanitize(recommendations = []) {
+  const seen = new Set();
+  return recommendations.filter(({ id }) => {
+    if (!productIds.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
 
 export async function POST(request) {
   const body = await request.json().catch(() => null);
@@ -22,21 +33,14 @@ export async function POST(request) {
 
   try {
     const result = await getRecommendations(query, catalogForAI);
-
-    // Never trust model output blindly: drop unknown or duplicate ids.
-    const seen = new Set();
-    const recommendations = (result.recommendations ?? []).filter(({ id }) => {
-      if (!productIds.has(id) || seen.has(id)) return false;
-      seen.add(id);
-      return true;
+    return NextResponse.json({
+      source: 'ai',
+      summary: result.summary ?? '',
+      recommendations: sanitize(result.recommendations),
     });
-
-    return NextResponse.json({ summary: result.summary ?? '', recommendations });
   } catch (err) {
-    console.error(err);
-    return NextResponse.json(
-      { error: 'Could not get recommendations from the AI. Please try again.' },
-      { status: 502 },
-    );
+    // Gemini is down, overloaded or misconfigured: answer with keyword search instead.
+    console.error(`AI recommendation failed, using keyword search: ${err.message}`);
+    return NextResponse.json({ source: 'fallback', ...searchProducts(query, products) });
   }
 }

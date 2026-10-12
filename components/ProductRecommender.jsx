@@ -34,6 +34,11 @@ export default function ProductRecommender({ products }) {
               ← Show all products
             </button>
           </div>
+          {result.source === 'fallback' && (
+            <p className="alert notice">
+              The AI assistant is busy right now, so these results come from our keyword search.
+            </p>
+          )}
           {result.summary && <p className="alert info">{result.summary}</p>}
           {result.items.length > 0 ? (
             <ProductGrid products={result.items} ranked />

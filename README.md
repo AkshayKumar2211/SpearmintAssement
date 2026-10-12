@@ -25,8 +25,17 @@ React UI ──POST /api/recommend { query }──► Next.js route handler ─�
 
 1. The user types their preferences, or clicks one of the example prompts.
 2. The route handler (`app/api/recommend/route.js`) sends Gemini the whole product catalog and the user's query. It uses Gemini's **structured output** (`responseMimeType: application/json` plus a `responseSchema`), so the model must reply with a list of product ids, a reason for each, and a summary.
-3. The server drops any id that isn't in the catalog, along with duplicates, so the model can't invent products. If Gemini is overloaded (429/503), the call is retried with backoff.
+3. The server drops any id that isn't in the catalog, along with duplicates, so the model can't invent products.
 4. The client maps the ids back to full product objects, keeps the AI's ranking order, and shows each recommendation with its reason.
+
+### When Gemini fails
+
+The app always answers a product search, even if Gemini is down:
+
+1. **Model fallback.** Each Gemini request has a 15 s timeout. If a model is overloaded (429/503), unavailable (404) or slow, the next model in `GEMINI_FALLBACK_MODELS` is tried, within a 25 s overall budget.
+2. **Keyword search fallback.** If no model answers, `lib/localSearch.js` parses the prompt for category ("phone", "PS5 games"), brand, budget ("under $500", "between $800 and $1500") and needs ("kids", "lightweight", "co-op") and ranks matching products by relevance and rating. The UI shows a notice that the results come from keyword search.
+3. **Unrelated prompts.** If the prompt isn't about products (e.g. "tell me a joke"), the user gets a hint on how to phrase a product search instead of an error.
+4. **Browser fallback.** If the API itself can't be reached, the same keyword search runs in the browser.
 
 The Gemini API key is only read on the server, in the route handler, so it never reaches the browser.
 
@@ -45,7 +54,8 @@ components/
   ProductCard.jsx               Product details, rank and AI reason
 hooks/useRecommendations.js     Loading/error state, maps ids to products
 lib/
-  gemini.js                     Prompt building and Gemini REST call with JSON schema
+  gemini.js                     Prompt building, Gemini REST call with JSON schema, model fallback
+  localSearch.js                Keyword search used when Gemini is unavailable
   fetchRecommendations.js       Client-side fetch wrapper for /api/recommend
 data/products.json              Product catalog
 ```
@@ -56,6 +66,7 @@ data/products.json              Product catalog
 | ---------------- | -------- | ------------------ |
 | `GEMINI_API_KEY` | yes      | none               |
 | `GEMINI_MODEL`   | no       | `gemini-3.8-flash` |
+| `GEMINI_FALLBACK_MODELS` | no | `gemini-3.5-flash,gemini-flash-latest` |
 
 ## Possible improvements
 
